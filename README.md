@@ -59,3 +59,27 @@ Permite consultar dados históricos com filtros:
 ---
 
 ## 🧱 Estrutura do Projeto
+dashboard-pi/
+├── index.html
+├── styles.css
+├── script.js
+└── config.js
+
+
+---
+
+## ⚙️ Configuração
+
+### 1. Backend
+
+Certifique-se de que o backend está rodando e acessível.
+
+### 2. Arquivo `config.js`
+
+Configure a URL da API:
+
+```javascript
+const CONFIG = {
+  API_BASE_URL: "https://SEU-BACKEND.onrender.com"
+};
+```
