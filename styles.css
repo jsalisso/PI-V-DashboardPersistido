@@ -126,6 +126,7 @@ body {
   font-size: 15px;
   font-weight: bold;
   color: #f8fafc;
+  word-break: break-word;
 }
 
 .filters-grid {
@@ -155,6 +156,9 @@ body {
 
 .toolbar {
   margin-bottom: 16px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 button {
@@ -169,6 +173,27 @@ button {
 
 button:hover {
   background: #1d4ed8;
+}
+
+.secondary-btn {
+  background: #334155;
+}
+
+.secondary-btn:hover {
+  background: #475569;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  flex-wrap: wrap;
+}
+
+.pagination span {
+  color: #cbd5e1;
+  font-size: 14px;
 }
 
 .table-wrapper {

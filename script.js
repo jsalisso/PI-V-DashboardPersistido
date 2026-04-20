@@ -4,13 +4,25 @@ const statusOverview = document.getElementById("statusOverview");
 const overviewCards = document.getElementById("overviewCards");
 
 const sensorSelect = document.getElementById("sensorSelect");
-const dateInput = document.getElementById("dateInput");
+const startDateInput = document.getElementById("startDateInput");
 const startTimeInput = document.getElementById("startTimeInput");
+const endDateInput = document.getElementById("endDateInput");
 const endTimeInput = document.getElementById("endTimeInput");
 const limitInput = document.getElementById("limitInput");
+
 const loadHistoryBtn = document.getElementById("loadHistoryBtn");
+const exportCsvBtn = document.getElementById("exportCsvBtn");
+
+const prevPageBtn = document.getElementById("prevPageBtn");
+const nextPageBtn = document.getElementById("nextPageBtn");
+const paginationInfo = document.getElementById("paginationInfo");
+
 const historyStatus = document.getElementById("historyStatus");
 const historyTableBody = document.getElementById("historyTableBody");
+
+let currentPage = 1;
+let lastHistoryItems = [];
+let lastHistoryMeta = null;
 
 function formatNumber(value, decimals = 2) {
   const num = Number(value);
@@ -136,27 +148,25 @@ async function loadSensorsForSelect() {
 }
 
 function buildDateTime(dateValue, timeValue) {
-  if (!dateValue || !timeValue) return null;
-  return `${dateValue}T${timeValue}:00`;
+  if (!dateValue) return null;
+  const time = timeValue || "00:00";
+  return `${dateValue}T${time}:00`;
 }
 
-async function loadHistory() {
+async function loadHistory(page = 1) {
   const sensorId = sensorSelect.value;
-  const date = dateInput.value;
-  const startTime = startTimeInput.value;
-  const endTime = endTimeInput.value;
-  const limit = limitInput.value || 100;
+  const start = buildDateTime(startDateInput.value, startTimeInput.value);
+  const end = buildDateTime(endDateInput.value, endTimeInput.value);
+  const limit = limitInput.value || 50;
 
   if (!sensorId) {
     historyStatus.textContent = "Selecione um sensor.";
     return;
   }
 
-  const start = buildDateTime(date, startTime);
-  const end = buildDateTime(date, endTime);
-
   const url = new URL(`${apiBase}/api/history/${sensorId}`);
   url.searchParams.set("limit", limit);
+  url.searchParams.set("page", page);
 
   if (start) url.searchParams.set("start", start);
   if (end) url.searchParams.set("end", end);
@@ -165,12 +175,21 @@ async function loadHistory() {
 
   try {
     const data = await fetchJson(url.toString());
-    renderHistoryTable(data.items || []);
-    historyStatus.textContent = `Histórico carregado: ${data.count || 0} leitura(s).`;
+
+    lastHistoryItems = data.items || [];
+    lastHistoryMeta = data;
+    currentPage = data.page || 1;
+
+    renderHistoryTable(lastHistoryItems);
+    updatePagination(data);
+
+    historyStatus.textContent =
+      `Histórico carregado: ${data.count || 0} item(ns) nesta página, total ${data.total || 0}.`;
   } catch (err) {
     console.error(err);
     historyStatus.textContent = "Erro ao carregar histórico.";
     historyTableBody.innerHTML = "";
+    paginationInfo.textContent = "Página 0 de 0";
   }
 }
 
@@ -197,18 +216,92 @@ function renderHistoryTable(items) {
   `).join("");
 }
 
+function updatePagination(data) {
+  const totalPages = data.totalPages || 1;
+  const page = data.page || 1;
+
+  paginationInfo.textContent = `Página ${page} de ${totalPages}`;
+
+  prevPageBtn.disabled = page <= 1;
+  nextPageBtn.disabled = page >= totalPages;
+}
+
+function exportHistoryToCsv() {
+  if (!lastHistoryItems.length) {
+    alert("Não há dados carregados para exportar.");
+    return;
+  }
+
+  const headers = [
+    "timestamp",
+    "status",
+    "co_ppm",
+    "metano_ppm",
+    "temp_c",
+    "umid_pct",
+    "presenca"
+  ];
+
+  const rows = lastHistoryItems.map(item => [
+    item.received_at || "",
+    item.status || "",
+    item?.leitura?.co_ppm ?? "",
+    item?.leitura?.metano_ppm ?? "",
+    item.temp_c ?? "",
+    item.umid_pct ?? "",
+    item.presenca ? "SIM" : "NAO"
+  ]);
+
+  const csvContent = [
+    headers.join(","),
+    ...rows.map(row =>
+      row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(",")
+    )
+  ].join("\n");
+
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `airguard-history-${sensorSelect.value}-page-${currentPage}.csv`;
+  a.click();
+
+  URL.revokeObjectURL(url);
+}
+
 function setDefaultDateTime() {
   const now = new Date();
   const yyyy = now.getFullYear();
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const dd = String(now.getDate()).padStart(2, "0");
 
-  dateInput.value = `${yyyy}-${mm}-${dd}`;
+  const today = `${yyyy}-${mm}-${dd}`;
+
+  startDateInput.value = today;
+  endDateInput.value = today;
   startTimeInput.value = "00:00";
   endTimeInput.value = "23:59";
 }
 
-loadHistoryBtn.addEventListener("click", loadHistory);
+loadHistoryBtn.addEventListener("click", () => {
+  currentPage = 1;
+  loadHistory(1);
+});
+
+prevPageBtn.addEventListener("click", () => {
+  if (currentPage > 1) {
+    loadHistory(currentPage - 1);
+  }
+});
+
+nextPageBtn.addEventListener("click", () => {
+  if (lastHistoryMeta && currentPage < lastHistoryMeta.totalPages) {
+    loadHistory(currentPage + 1);
+  }
+});
+
+exportCsvBtn.addEventListener("click", exportHistoryToCsv);
 
 document.addEventListener("DOMContentLoaded", async () => {
   setDefaultDateTime();

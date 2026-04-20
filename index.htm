@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>AirGuard Dashboard PI-V v2.0</title>
+  <title>AirGuard Dashboard PI v2.0</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -29,8 +29,8 @@
         </div>
 
         <div class="field">
-          <label for="dateInput">Data</label>
-          <input type="date" id="dateInput" />
+          <label for="startDateInput">Data inicial</label>
+          <input type="date" id="startDateInput" />
         </div>
 
         <div class="field">
@@ -39,21 +39,35 @@
         </div>
 
         <div class="field">
+          <label for="endDateInput">Data final</label>
+          <input type="date" id="endDateInput" />
+        </div>
+
+        <div class="field">
           <label for="endTimeInput">Hora final</label>
           <input type="time" id="endTimeInput" />
         </div>
 
         <div class="field">
-          <label for="limitInput">Limite</label>
-          <input type="number" id="limitInput" value="100" min="1" max="1000" />
+          <label for="limitInput">Itens por página</label>
+          <input type="number" id="limitInput" value="50" min="1" max="1000" />
         </div>
       </div>
 
       <div class="toolbar">
         <button id="loadHistoryBtn">Consultar histórico</button>
+        <button id="exportCsvBtn" class="secondary-btn">Exportar CSV</button>
       </div>
 
-      <div id="historyStatus" class="status-text">Selecione os filtros e consulte o histórico.</div>
+      <div class="pagination">
+        <button id="prevPageBtn" class="secondary-btn">Anterior</button>
+        <span id="paginationInfo">Página 1 de 1</span>
+        <button id="nextPageBtn" class="secondary-btn">Próxima</button>
+      </div>
+
+      <div id="historyStatus" class="status-text">
+        Selecione os filtros e consulte o histórico.
+      </div>
 
       <div class="table-wrapper">
         <table id="historyTable">
@@ -68,8 +82,7 @@
               <th>Presença</th>
             </tr>
           </thead>
-          <tbody id="historyTableBody">
-          </tbody>
+          <tbody id="historyTableBody"></tbody>
         </table>
       </div>
     </div>
