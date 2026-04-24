@@ -6,6 +6,7 @@
   <title>AirGuard Dashboard PI-V v2.0</title>
   <link rel="stylesheet" href="styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
 </head>
 <body>
   <div class="container">
@@ -66,6 +67,10 @@
         <button id="nextPageBtn" class="secondary-btn">Próxima</button>
       </div>
 
+      <div id="thresholdWarning" class="disclaimer" style="display: none; border-color: #f59e0b; color: #fde68a;">
+        ⚠️ **Observabilidade Crítica**: Foram detectadas variações nos limites de segurança (thresholds) durante este período. O dashboard está priorizando os valores mais recentes para as zonas de alerta.
+      </div>
+
       <div id="historyStatus" class="status-text">
         Selecione os filtros e consulte o histórico.
       </div>
@@ -81,6 +86,8 @@
               <th>Temp</th>
               <th>Umidade</th>
               <th>Presença</th>
+              <th>Chama</th>
+              <th>Buzzer</th>
             </tr>
           </thead>
           <tbody id="historyTableBody"></tbody>
@@ -101,9 +108,9 @@
           </div>
           
           <div class="panel chart-container">
-            <h3>Histórico de Presença</h3>
-            <p class="chart-subtitle">Sinal digital de detecção (SIM/NÃO)</p>
-            <canvas id="presenceChart"></canvas>
+            <h3>Linha do Tempo de Segurança</h3>
+            <p class="chart-subtitle">Eventos críticos: Presença (azul), Chama (vermelho), Buzzer (laranja)</p>
+            <canvas id="safetyEventsChart"></canvas>
           </div>
           
           <div class="panel chart-container full-width">

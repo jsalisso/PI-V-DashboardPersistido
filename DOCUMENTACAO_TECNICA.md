@@ -6,9 +6,7 @@ Esta documentação detalha a evolução, arquitetura e decisões de engenharia 
 
 ## 📖 Narrativa Técnica: Da Visualização à Observabilidade
 
-O projeto nasceu com o objetivo de monitorar sensores de qualidade do ar e presença via IoT. Inicialmente focado na apresentação tabular de dados históricos, o sistema evoluiu ao identificar um desafio crítico no monitoramento físico: **o ruído e o viés dos sensores.**
-
-A narrativa do projeto mudou de "mostrar dados" para "interpretar sinais". Implementamos uma camada de **Data Engineering no Frontend** capaz de lidar com grandes volumes de dados, preservando picos críticos de segurança (CO e Gás) e permitindo o diagnóstico de hardware através de análise diferencial (ΔTemp). Hoje, o sistema não apenas informa o estado atual, mas atua como uma ferramenta de auditoria de confiabilidade de sensores.
+A narrativa do projeto mudou de "mostrar dados" para "interpretar sinais de segurança". O sistema evoluiu para uma arquitetura de **Sistema Ciber-Físico**, integrando não apenas sensores passivos (Temp, Umidade), mas também sensores críticos (**Chama**), de contexto (**Presença**) e atuadores (**Buzzer**). Implementamos uma camada de **Data Engineering no Frontend** que preserva a integridade de sinais booleanos (OR aggregation) e classifica o estado do ambiente em tempo real.
 
 ---
 
@@ -29,6 +27,16 @@ A narrativa do projeto mudou de "mostrar dados" para "interpretar sinais". Imple
 *   **Decisão**: Implementar cálculo de **ΔTemp** (derivada da temperatura) e um Scatter Plot de correlação (ΔTemp vs Presença).
 *   **Motivo**: Permitir que o operador identifique se detecções de presença estão ocorrendo devido a movimentos reais ou devido ao ligar/desligar de sistemas de ar-condicionado ou incidência solar.
 
+### ADR-004: Timeline de Eventos com Offset Vertical
+*   **Contexto**: A visualização de múltiplos sinais binários (0/1) no mesmo eixo Y causa sobreposição total das linhas, impossibilitando a leitura de eventos simultâneos.
+*   **Decisão**: Implementar "Lanes" verticais para sinais digitais (Presence: 0-1, Flame: 2-3, Buzzer: 4-5).
+*   **Motivo**: Garante que o operador veja instantaneamente se a detecção de chama ativou corretamente o buzzer, mesmo que ambos ocorram no mesmo timestamp.
+
+### ADR-005: Preservação de Sinais Críticos (Boolean OR)
+*   **Contexto**: Ao agregar dados em janelas de tempo, sinais booleanos curtos (ex: chama detectada por 1 segundo) podem ser "apagados" se usada a média aritmética.
+*   **Decisão**: Utilizar lógica **ANY (Boolean OR)** para agregação de sinais de segurança.
+*   **Motivo**: Em sistemas críticos, se um perigo ocorreu em qualquer momento da janela, o estado da janela deve ser "Detectado".
+
 ---
 
 ## ⚖️ Trade-offs e Análise de Decisões
@@ -37,7 +45,8 @@ A narrativa do projeto mudou de "mostrar dados" para "interpretar sinais". Imple
 | :--- | :--- | :--- |
 | **Processamento no Client** | Agilidade no desenvolvimento, redução de carga no servidor, feedback instantâneo ao trocar de página. | Consumo de CPU/RAM do usuário; limitado pelo hardware do cliente para datasets massivos. |
 | **Agregação por Buckets** | Performance estável de 60FPS; preservação de tendências e picos. | Perda da granularidade exata de segundos em janelas muito grandes. |
-| **Interface de Eixo Duplo** | Permite comparar Temp (°C) e Gases (PPM) na mesma escala temporal. | Pode ser confuso para usuários leigos se não houver legendas claras. |
+| **Offset Vertical (Digital)** | Claridade total em eventos simultâneos; semântica visual de "canais". | Exige tooltips customizados para traduzir os valores de offset para o usuário. |
+| **Thresholds no Gráfico** | Identificação imediata de violação de limites; UX industrial. | Exige validação de consistência caso os limites mudem no histórico. |
 
 ---
 

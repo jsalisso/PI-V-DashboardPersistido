@@ -228,6 +228,16 @@ td {
   color: #e2e8f0;
 }
 
+.indicator-flame {
+  color: #ef4444;
+  font-weight: bold;
+}
+
+.indicator-buzzer {
+  color: #f59e0b;
+  font-weight: bold;
+}
+
 .info-tag {
   background: #1e293b;
   color: #94a3b8;

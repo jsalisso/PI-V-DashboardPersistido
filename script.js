@@ -19,6 +19,7 @@ const paginationInfo = document.getElementById("paginationInfo");
 
 const historyStatus = document.getElementById("historyStatus");
 const historyTableBody = document.getElementById("historyTableBody");
+const thresholdWarning = document.getElementById("thresholdWarning");
 
 let currentPage = 1;
 let lastHistoryItems = [];
@@ -26,7 +27,7 @@ let lastHistoryMeta = null;
 
 // Instâncias dos gráficos
 let timeSeriesChart = null;
-let presenceChart = null;
+let safetyEventsChart = null;
 let correlationChart = null;
 
 function formatNumber(value, decimals = 2) {
@@ -50,10 +51,16 @@ function getStatusClass(status) {
 }
 
 function safe(text) {
-  return String(text || "")
+  return String(text ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
+}
+
+function checkThresholdConsistency(items) {
+  if (!items || items.length <= 1) return true;
+  const first = JSON.stringify(items[0].thresholds);
+  return items.every(item => JSON.stringify(item.thresholds) === first);
 }
 
 async function fetchJson(url) {
@@ -185,6 +192,8 @@ async function loadHistory(page = 1) {
     lastHistoryMeta = data;
     currentPage = data.page || 1;
 
+    thresholdWarning.style.display = checkThresholdConsistency(lastHistoryItems) ? "none" : "flex";
+
     renderHistoryTable(lastHistoryItems);
     updatePagination(data);
     updateCharts(lastHistoryItems);
@@ -203,7 +212,7 @@ function renderHistoryTable(items) {
   if (!items.length) {
     historyTableBody.innerHTML = `
       <tr>
-        <td colspan="7">Nenhuma leitura encontrada para o período selecionado.</td>
+        <td colspan="9">Nenhuma leitura encontrada para o período selecionado.</td>
       </tr>
     `;
     return;
@@ -218,6 +227,8 @@ function renderHistoryTable(items) {
       <td>${formatNumber(item.temp_c, 1)} °C</td>
       <td>${formatNumber(item.umid_pct, 1)} %</td>
       <td>${item.presenca ? "SIM" : "NÃO"}</td>
+      <td>${item?.leitura?.flame_detected ? "🔥 SIM" : "NÃO"}</td>
+      <td>${item.buzzer ? "🔔 ATIVO" : "OFF"}</td>
     </tr>
   `).join("");
 }
@@ -247,18 +258,46 @@ function exportHistoryToCsv() {
     "metano_ppm",
     "temp_c",
     "umid_pct",
-    "presenca"
+    "presenca",
+    "flame",
+    "buzzer",
+    "co_level",
+    "gas_level",
+    "safety_status",
+    "threshold_co_alerta",
+    "threshold_co_perigo"
   ];
 
-  const rows = lastHistoryItems.map(item => [
-    item.received_at || "",
-    item.status || "",
-    item?.leitura?.co_ppm ?? "",
-    item?.leitura?.metano_ppm ?? "",
-    item.temp_c ?? "",
-    item.umid_pct ?? "",
-    item.presenca ? "SIM" : "NAO"
-  ]);
+  const rows = lastHistoryItems.map(item => {
+    const co = item?.leitura?.co_ppm ?? 0;
+    const gas = item?.leitura?.metano_ppm ?? 0;
+    const th = item.thresholds || {};
+    
+    let coLevel = "SAFE";
+    if (co >= (th.co_perigo || 15)) coLevel = "DANGER";
+    else if (co >= (th.co_alerta || 5)) coLevel = "ALERT";
+
+    let gasLevel = "SAFE";
+    if (gas >= (th.gas_perigo || 10)) gasLevel = "DANGER";
+    else if (gas >= (th.gas_alerta || 5)) gasLevel = "ALERT";
+
+    return [
+      item.received_at || "",
+      item.status || "",
+      co,
+      gas,
+      item.temp_c ?? "",
+      item.umid_pct ?? "",
+      item.presenca ? "SIM" : "NAO",
+      (item?.leitura?.flame_detected ?? false) ? "SIM" : "NAO",
+      item.buzzer ? "SIM" : "NAO",
+      coLevel,
+      gasLevel,
+      item.safety_alert_active ? "CRITICAL" : "SAFE",
+      th.co_alerta ?? "",
+      th.co_perigo ?? ""
+    ];
+  });
 
   const csvContent = [
     headers.join(","),
@@ -331,20 +370,28 @@ function aggregateBuckets(data, maxPoints = 300) {
       acc.coMax = Math.max(acc.coMax, item?.leitura?.co_ppm || 0);
       acc.gasMax = Math.max(acc.gasMax, item?.leitura?.metano_ppm || 0);
       acc.presenceSum += item.presenca ? 1 : 0;
+      acc.flameSum += (item?.leitura?.flame_detected ?? false) ? 1 : 0;
+      acc.buzzerSum += item.buzzer ? 1 : 0;
       return acc;
-    }, { tempSum: 0, umidSum: 0, coMax: -Infinity, gasMax: -Infinity, presenceSum: 0 });
+    }, { tempSum: 0, umidSum: 0, coMax: -Infinity, gasMax: -Infinity, presenceSum: 0, flameSum: 0, buzzerSum: 0 });
 
     const size = bucket.length;
     
+    const safety_alert_active = stats.flameSum > 0 || stats.coMax >= (bucket[bucket.length - 1].thresholds?.co_perigo || 15);
+    
     result.push({
       received_at: bucket[0].received_at,
-      temp_c: stats.tempSum / size, // Média para estabilidade térmica
+      temp_c: stats.tempSum / size,
       umid_pct: stats.umidSum / size,
       leitura: {
-        co_ppm: stats.coMax, // MAX para segurança (não ocultar picos de CO)
-        metano_ppm: stats.gasMax // MAX para segurança
+        co_ppm: stats.coMax,
+        metano_ppm: stats.gasMax,
+        flame_detected: stats.flameSum > 0
       },
-      presenca: (stats.presenceSum / size) > 0.5 // Presença majoritária
+      presenca: stats.presenceSum > 0,
+      buzzer: stats.buzzerSum > 0,
+      safety_alert_active,
+      thresholds: bucket[bucket.length - 1].thresholds
     });
   }
 
@@ -363,15 +410,21 @@ function updateCharts(items) {
   const umidPct = displayItems.map(item => item.umid_pct);
   const coPpm = displayItems.map(item => item?.leitura?.co_ppm || 0);
   const gasPpm = displayItems.map(item => item?.leitura?.metano_ppm || 0);
-  const presence = displayItems.map(item => item.presenca ? 1 : 0);
   
-  // Cálculo de ΔTemp com Threshold de Ruído (0.1°C)
+  const presence = displayItems.map(item => item.presenca ? 1 : 0);
+  const flame = displayItems.map(item => (item?.leitura?.flame_detected ?? false) ? 3 : 2); // Offset 2-3
+  const buzzer = displayItems.map(item => item.buzzer ? 5 : 4); // Offset 4-5
+  
+  // Cálculo de ΔTemp com Threshold de Ruído (0.1°C) para Diagnóstico
   const NOISE_THRESHOLD = 0.1;
   const deltaTemp = displayItems.map((item, i) => {
     if (i === 0) return 0;
     const diff = item.temp_c - displayItems[i - 1].temp_c;
     return Math.abs(diff) < NOISE_THRESHOLD ? 0 : diff;
   });
+  
+  // Thresholds do último item (mais recente)
+  const th = displayItems[displayItems.length - 1].thresholds || { co_alerta: 5, co_perigo: 15, gas_alerta: 5, gas_perigo: 10 };
 
   const colors = {
     temp: "#f87171",
@@ -379,10 +432,12 @@ function updateCharts(items) {
     co: "#fbbf24",
     gas: "#34d399",
     presence: "#818cf8",
+    flame: "#ef4444",
+    buzzer: "#f59e0b",
     presenceOff: "rgba(148, 163, 184, 0.3)"
   };
 
-  // 2. Gráfico de Monitoramento Temporal
+  // 2. Gráfico de Monitoramento Temporal com Zonas de Segurança
   if (timeSeriesChart) timeSeriesChart.destroy();
   const tsCtx = document.getElementById("timeSeriesChart").getContext("2d");
   timeSeriesChart = new Chart(tsCtx, {
@@ -390,10 +445,10 @@ function updateCharts(items) {
     data: {
       labels: labels,
       datasets: [
-        { label: "Temp (Avg °C)", data: tempC, borderColor: colors.temp, tension: 0.3, yAxisID: "y-temp" },
-        { label: "Umid (Avg %)", data: umidPct, borderColor: colors.umid, tension: 0.3, yAxisID: "y-temp" },
-        { label: "CO (Max ppm)", data: coPpm, borderColor: colors.co, tension: 0.3, yAxisID: "y-gas" },
-        { label: "Gás (Max ppm)", data: gasPpm, borderColor: colors.gas, tension: 0.3, yAxisID: "y-gas" }
+        { label: "Temp (°C)", data: tempC, borderColor: colors.temp, tension: 0.3, yAxisID: "y-temp", pointRadius: 0 },
+        { label: "Umid (%)", data: umidPct, borderColor: colors.umid, tension: 0.3, yAxisID: "y-temp", pointRadius: 0 },
+        { label: "CO (ppm)", data: coPpm, borderColor: colors.co, tension: 0.3, yAxisID: "y-gas", pointRadius: 2 },
+        { label: "Gás (ppm)", data: gasPpm, borderColor: colors.gas, tension: 0.3, yAxisID: "y-gas", pointRadius: 2 }
       ]
     },
     options: {
@@ -401,40 +456,68 @@ function updateCharts(items) {
       maintainAspectRatio: false,
       plugins: { 
         legend: { labels: { color: "#cbd5e1" } },
-        tooltip: { mode: 'index', intersect: false }
+        tooltip: { mode: 'index', intersect: false },
+        annotation: {
+          annotations: {
+            coAlert: { type: 'line', yMin: th.co_alerta, yMax: th.co_alerta, borderColor: 'rgba(251, 191, 36, 0.5)', borderWidth: 2, borderDash: [6, 6], label: { display: true, content: 'CO Alerta', backgroundColor: 'rgba(251, 191, 36, 0.8)' }, yScaleID: 'y-gas' },
+            coDanger: { type: 'line', yMin: th.co_perigo, yMax: th.co_perigo, borderColor: 'rgba(239, 68, 68, 0.5)', borderWidth: 2, borderDash: [6, 6], label: { display: true, content: 'CO Perigo', backgroundColor: 'rgba(239, 68, 68, 0.8)' }, yScaleID: 'y-gas' }
+          }
+        }
       },
       scales: {
         x: { ticks: { color: "#94a3b8", maxRotation: 45, minRotation: 45 }, grid: { color: "#1e293b" } },
         "y-temp": { position: "left", ticks: { color: "#94a3b8" }, grid: { color: "#1e293b" } },
-        "y-gas": { position: "right", ticks: { color: "#94a3b8" }, grid: { display: false } }
+        "y-gas": { position: "right", ticks: { color: "#94a3b8" }, grid: { display: false }, min: 0 }
       }
     }
   });
 
-  // 3. Gráfico de Presença (Digital Signal)
-  if (presenceChart) presenceChart.destroy();
-  const pCtx = document.getElementById("presenceChart").getContext("2d");
-  presenceChart = new Chart(pCtx, {
+  // 3. Linha do Tempo de Segurança (Digital Signals)
+  if (safetyEventsChart) safetyEventsChart.destroy();
+  const sCtx = document.getElementById("safetyEventsChart").getContext("2d");
+  safetyEventsChart = new Chart(sCtx, {
     type: "line",
     data: {
       labels: labels,
-      datasets: [{
-        label: "Detecção",
-        data: presence,
-        borderColor: colors.presence,
-        backgroundColor: "rgba(129, 140, 248, 0.1)",
-        fill: true,
-        stepped: true,
-        tension: 0
-      }]
+      datasets: [
+        { label: "Presença", data: presence, borderColor: colors.presence, stepped: true, tension: 0, pointRadius: 0, fill: false },
+        { label: "Chama", data: flame, borderColor: colors.flame, stepped: true, tension: 0, pointRadius: 0, borderWidth: 3, fill: false },
+        { label: "Buzzer", data: buzzer, borderColor: colors.buzzer, stepped: true, tension: 0, pointRadius: 0, fill: false }
+      ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: { 
+        legend: { display: true, labels: { color: "#cbd5e1" } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const val = ctx.raw;
+              if (val <= 1) return `Presença: ${val === 1 ? 'SIM' : 'NÃO'}`;
+              if (val <= 3) return `Chama: ${val === 3 ? 'DETECTADA' : 'LIMPO'}`;
+              return `Buzzer: ${val === 5 ? 'ATIVO' : 'OFF'}`;
+            }
+          }
+        }
+      },
       scales: {
         x: { ticks: { display: false }, grid: { color: "#1e293b" } },
-        y: { min: -0.1, max: 1.1, ticks: { stepSize: 1, color: "#94a3b8", callback: v => v === 1 ? "SIM" : "NÃO" }, grid: { color: "#1e293b" } }
+        y: { 
+          min: -0.5, 
+          max: 5.5, 
+          ticks: { 
+            stepSize: 1, 
+            color: "#94a3b8", 
+            callback: v => {
+              if (v === 1) return "PRESENÇA";
+              if (v === 3) return "CHAMA";
+              if (v === 5) return "BUZZER";
+              return "";
+            } 
+          }, 
+          grid: { color: "#1e293b" } 
+        }
       }
     }
   });
