@@ -228,8 +228,76 @@ td {
   color: #e2e8f0;
 }
 
+.info-tag {
+  background: #1e293b;
+  color: #94a3b8;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: help;
+  font-size: 11px;
+  margin-left: 8px;
+}
+
 @media (max-width: 900px) {
   .meta-grid {
     grid-template-columns: 1fr;
   }
+  
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Charts Styles */
+.charts-section {
+  margin-top: 32px;
+  border-top: 1px solid #1f2937;
+  padding-top: 24px;
+}
+
+.disclaimer {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.chart-container {
+  margin-bottom: 0;
+  min-height: 350px;
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-container h3 {
+  font-size: 16px;
+  margin-bottom: 4px;
+  color: #f8fafc;
+}
+
+.chart-subtitle {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 16px;
+}
+
+.full-width {
+  grid-column: 1 / -1;
+}
+
+canvas {
+  flex-grow: 1;
+  max-width: 100% !important;
 }

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>AirGuard Dashboard PI-V v2.0</title>
   <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <div class="container">
@@ -61,7 +62,7 @@
 
       <div class="pagination">
         <button id="prevPageBtn" class="secondary-btn">Anterior</button>
-        <span id="paginationInfo">Página 1 de 1</span>
+        <span id="paginationInfo">Mostrando 0 de 0 registros (Página 1)</span>
         <button id="nextPageBtn" class="secondary-btn">Próxima</button>
       </div>
 
@@ -84,6 +85,36 @@
           </thead>
           <tbody id="historyTableBody"></tbody>
         </table>
+      </div>
+
+      <!-- Seção de Gráficos -->
+      <div class="charts-section">
+        <div class="disclaimer">
+          ⚠️ Os gráficos abaixo representam apenas os dados carregados na tabela acima (esta página).
+        </div>
+        
+        <div class="charts-grid">
+          <div class="panel chart-container">
+            <h3>Monitoramento Temporal</h3>
+            <p class="chart-subtitle">Variação das métricas absolutas ao longo do período</p>
+            <canvas id="timeSeriesChart"></canvas>
+          </div>
+          
+          <div class="panel chart-container">
+            <h3>Histórico de Presença</h3>
+            <p class="chart-subtitle">Sinal digital de detecção (SIM/NÃO)</p>
+            <canvas id="presenceChart"></canvas>
+          </div>
+          
+          <div class="panel chart-container full-width">
+            <h3>Análise de Correlação: ΔTemperatura vs Presença</h3>
+            <p class="chart-subtitle">
+              Diagnóstico: Detectando se variações térmicas bruscas (ΔTemp) causam falsos positivos. 
+              <span class="info-tag" title="Se muitos pontos 'SIM' aparecerem em ΔTemp alto, o sensor pode estar sofrendo viés térmico.">ⓘ Info</span>
+            </p>
+            <canvas id="correlationChart"></canvas>
+          </div>
+        </div>
       </div>
     </div>
   </div>

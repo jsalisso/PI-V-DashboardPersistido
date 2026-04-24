@@ -24,6 +24,11 @@ let currentPage = 1;
 let lastHistoryItems = [];
 let lastHistoryMeta = null;
 
+// Instâncias dos gráficos
+let timeSeriesChart = null;
+let presenceChart = null;
+let correlationChart = null;
+
 function formatNumber(value, decimals = 2) {
   const num = Number(value);
   return Number.isFinite(num) ? num.toFixed(decimals) : "--";
@@ -182,6 +187,7 @@ async function loadHistory(page = 1) {
 
     renderHistoryTable(lastHistoryItems);
     updatePagination(data);
+    updateCharts(lastHistoryItems);
 
     historyStatus.textContent =
       `Histórico carregado: ${data.count || 0} item(ns) nesta página, total ${data.total || 0}.`;
@@ -189,7 +195,7 @@ async function loadHistory(page = 1) {
     console.error(err);
     historyStatus.textContent = "Erro ao carregar histórico.";
     historyTableBody.innerHTML = "";
-    paginationInfo.textContent = "Página 0 de 0";
+    paginationInfo.textContent = "Mostrando 0 de 0 registros (Página 0 de 0)";
   }
 }
 
@@ -219,8 +225,10 @@ function renderHistoryTable(items) {
 function updatePagination(data) {
   const totalPages = data.totalPages || 1;
   const page = data.page || 1;
+  const count = data.count || 0;
+  const total = data.total || 0;
 
-  paginationInfo.textContent = `Página ${page} de ${totalPages}`;
+  paginationInfo.textContent = `Mostrando ${count} de ${total} registros (Página ${page} de ${totalPages})`;
 
   prevPageBtn.disabled = page <= 1;
   nextPageBtn.disabled = page >= totalPages;
@@ -302,6 +310,179 @@ nextPageBtn.addEventListener("click", () => {
 });
 
 exportCsvBtn.addEventListener("click", exportHistoryToCsv);
+
+/**
+ * Data Engineering Layer: Agregação por Buckets
+ * Preserva tendências (AVG) para sensores contínuos e picos (MAX) para segurança.
+ */
+function aggregateBuckets(data, maxPoints = 300) {
+  if (data.length <= maxPoints) return data;
+  
+  const bucketSize = Math.ceil(data.length / maxPoints);
+  const result = [];
+
+  for (let i = 0; i < data.length; i += bucketSize) {
+    const bucket = data.slice(i, i + bucketSize);
+    
+    // Agregação estatística multivariável
+    const stats = bucket.reduce((acc, item) => {
+      acc.tempSum += item.temp_c || 0;
+      acc.umidSum += item.umid_pct || 0;
+      acc.coMax = Math.max(acc.coMax, item?.leitura?.co_ppm || 0);
+      acc.gasMax = Math.max(acc.gasMax, item?.leitura?.metano_ppm || 0);
+      acc.presenceSum += item.presenca ? 1 : 0;
+      return acc;
+    }, { tempSum: 0, umidSum: 0, coMax: -Infinity, gasMax: -Infinity, presenceSum: 0 });
+
+    const size = bucket.length;
+    
+    result.push({
+      received_at: bucket[0].received_at,
+      temp_c: stats.tempSum / size, // Média para estabilidade térmica
+      umid_pct: stats.umidSum / size,
+      leitura: {
+        co_ppm: stats.coMax, // MAX para segurança (não ocultar picos de CO)
+        metano_ppm: stats.gasMax // MAX para segurança
+      },
+      presenca: (stats.presenceSum / size) > 0.5 // Presença majoritária
+    });
+  }
+
+  return result;
+}
+
+function updateCharts(items) {
+  if (!items || items.length === 0) return;
+
+  // 1. Data Engineering Layer
+  const sortedItems = [...items].sort((a, b) => new Date(a.received_at) - new Date(b.received_at));
+  const displayItems = aggregateBuckets(sortedItems, 300);
+
+  const labels = displayItems.map(item => formatDate(item.received_at));
+  const tempC = displayItems.map(item => item.temp_c);
+  const umidPct = displayItems.map(item => item.umid_pct);
+  const coPpm = displayItems.map(item => item?.leitura?.co_ppm || 0);
+  const gasPpm = displayItems.map(item => item?.leitura?.metano_ppm || 0);
+  const presence = displayItems.map(item => item.presenca ? 1 : 0);
+  
+  // Cálculo de ΔTemp com Threshold de Ruído (0.1°C)
+  const NOISE_THRESHOLD = 0.1;
+  const deltaTemp = displayItems.map((item, i) => {
+    if (i === 0) return 0;
+    const diff = item.temp_c - displayItems[i - 1].temp_c;
+    return Math.abs(diff) < NOISE_THRESHOLD ? 0 : diff;
+  });
+
+  const colors = {
+    temp: "#f87171",
+    umid: "#60a5fa",
+    co: "#fbbf24",
+    gas: "#34d399",
+    presence: "#818cf8",
+    presenceOff: "rgba(148, 163, 184, 0.3)"
+  };
+
+  // 2. Gráfico de Monitoramento Temporal
+  if (timeSeriesChart) timeSeriesChart.destroy();
+  const tsCtx = document.getElementById("timeSeriesChart").getContext("2d");
+  timeSeriesChart = new Chart(tsCtx, {
+    type: "line",
+    data: {
+      labels: labels,
+      datasets: [
+        { label: "Temp (Avg °C)", data: tempC, borderColor: colors.temp, tension: 0.3, yAxisID: "y-temp" },
+        { label: "Umid (Avg %)", data: umidPct, borderColor: colors.umid, tension: 0.3, yAxisID: "y-temp" },
+        { label: "CO (Max ppm)", data: coPpm, borderColor: colors.co, tension: 0.3, yAxisID: "y-gas" },
+        { label: "Gás (Max ppm)", data: gasPpm, borderColor: colors.gas, tension: 0.3, yAxisID: "y-gas" }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { 
+        legend: { labels: { color: "#cbd5e1" } },
+        tooltip: { mode: 'index', intersect: false }
+      },
+      scales: {
+        x: { ticks: { color: "#94a3b8", maxRotation: 45, minRotation: 45 }, grid: { color: "#1e293b" } },
+        "y-temp": { position: "left", ticks: { color: "#94a3b8" }, grid: { color: "#1e293b" } },
+        "y-gas": { position: "right", ticks: { color: "#94a3b8" }, grid: { display: false } }
+      }
+    }
+  });
+
+  // 3. Gráfico de Presença (Digital Signal)
+  if (presenceChart) presenceChart.destroy();
+  const pCtx = document.getElementById("presenceChart").getContext("2d");
+  presenceChart = new Chart(pCtx, {
+    type: "line",
+    data: {
+      labels: labels,
+      datasets: [{
+        label: "Detecção",
+        data: presence,
+        borderColor: colors.presence,
+        backgroundColor: "rgba(129, 140, 248, 0.1)",
+        fill: true,
+        stepped: true,
+        tension: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { display: false }, grid: { color: "#1e293b" } },
+        y: { min: -0.1, max: 1.1, ticks: { stepSize: 1, color: "#94a3b8", callback: v => v === 1 ? "SIM" : "NÃO" }, grid: { color: "#1e293b" } }
+      }
+    }
+  });
+
+  // 4. Análise de Correlação (Signal Bias Detection)
+  if (correlationChart) correlationChart.destroy();
+  const cCtx = document.getElementById("correlationChart").getContext("2d");
+  
+  const scatterData = displayItems.map((item, i) => ({
+    x: deltaTemp[i],
+    y: item.presenca ? 1 : 0
+  }));
+
+  correlationChart = new Chart(cCtx, {
+    type: "scatter",
+    data: {
+      datasets: [{
+        label: "Detecção vs Variação Térmica",
+        data: scatterData,
+        backgroundColor: (ctx) => {
+          const raw = ctx.raw;
+          return raw && raw.y === 1 ? colors.presence : colors.presenceOff;
+        },
+        pointRadius: (ctx) => {
+          const raw = ctx.raw;
+          return raw && raw.y === 1 ? 8 : 4;
+        },
+        pointHoverRadius: 10
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `ΔTemp: ${ctx.raw.x.toFixed(2)}°C | Presença: ${ctx.raw.y === 1 ? "SIM" : "NÃO"}`
+          }
+        }
+      },
+      scales: {
+        x: { title: { display: true, text: "Variação de Temperatura (Δ°C)", color: "#cbd5e1" }, ticks: { color: "#94a3b8" }, grid: { color: "#1e293b" } },
+        y: { title: { display: true, text: "Status de Presença", color: "#cbd5e1" }, min: -0.2, max: 1.2, ticks: { stepSize: 1, color: "#94a3b8", callback: v => v === 1 ? "SIM" : "NÃO" }, grid: { color: "#1e293b" } }
+      }
+    }
+  });
+}
 
 document.addEventListener("DOMContentLoaded", async () => {
   setDefaultDateTime();
