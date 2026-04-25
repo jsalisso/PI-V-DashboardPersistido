@@ -25,10 +25,18 @@ let currentPage = 1;
 let lastHistoryItems = [];
 let lastHistoryMeta = null;
 
-// Instâncias dos gráficos
+// Instâncias dos gráficos (Gerenciamento de Lifecycle)
 let timeSeriesChart = null;
 let safetyEventsChart = null;
 let correlationChart = null;
+
+// Configurações Globais do Chart.js para Estética SCADA
+if (window.Chart) {
+  Chart.defaults.color = "#94a3b8";
+  Chart.defaults.font.family = "'Inter', sans-serif";
+  Chart.defaults.font.size = 11;
+  Chart.defaults.borderColor = "rgba(148, 163, 184, 0.1)";
+}
 
 function formatNumber(value, decimals = 2) {
   const num = Number(value);
@@ -434,81 +442,83 @@ function updateCharts(items) {
     presence: "#818cf8",
     flame: "#ef4444",
     buzzer: "#f59e0b",
-    presenceOff: "rgba(148, 163, 184, 0.3)"
+    grid: "rgba(148, 163, 184, 0.05)",
+    text: "#94a3b8"
   };
 
+  console.log("📊 [DEBUG] Renderizando gráficos... Instâncias ativas antes:", Chart.instances.length);
+
   // 2. Gráfico de Monitoramento Temporal com Zonas de Segurança
-  if (timeSeriesChart) timeSeriesChart.destroy();
+  if (timeSeriesChart) {
+    console.log("♻️ [DEBUG] Destruindo timeSeriesChart");
+    timeSeriesChart.destroy();
+  }
+  
   const tsCtx = document.getElementById("timeSeriesChart").getContext("2d");
   timeSeriesChart = new Chart(tsCtx, {
     type: "line",
     data: {
       labels: labels,
       datasets: [
-        { label: "Temp (°C)", data: tempC, borderColor: colors.temp, tension: 0.3, yAxisID: "y-temp", pointRadius: 0 },
-        { label: "Umid (%)", data: umidPct, borderColor: colors.umid, tension: 0.3, yAxisID: "y-temp", pointRadius: 0 },
-        { label: "CO (ppm)", data: coPpm, borderColor: colors.co, tension: 0.3, yAxisID: "y-gas", pointRadius: 2 },
-        { label: "Gás (ppm)", data: gasPpm, borderColor: colors.gas, tension: 0.3, yAxisID: "y-gas", pointRadius: 2 }
+        { label: "Temp (°C)", data: tempC, borderColor: colors.temp, backgroundColor: "transparent", borderWidth: 2, tension: 0.2, yAxisID: "y-temp", pointRadius: 0 },
+        { label: "Umid (%)", data: umidPct, borderColor: colors.umid, backgroundColor: "transparent", borderWidth: 2, tension: 0.2, yAxisID: "y-temp", pointRadius: 0 },
+        { label: "CO (ppm)", data: coPpm, borderColor: colors.co, backgroundColor: "rgba(251, 191, 36, 0.1)", borderWidth: 2, tension: 0, yAxisID: "y-gas", pointRadius: 1, fill: true },
+        { label: "Gás (ppm)", data: gasPpm, borderColor: colors.gas, backgroundColor: "rgba(52, 211, 153, 0.1)", borderWidth: 2, tension: 0, yAxisID: "y-gas", pointRadius: 1, fill: true }
       ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
       plugins: { 
-        legend: { labels: { color: "#cbd5e1" } },
-        tooltip: { mode: 'index', intersect: false },
+        legend: { position: 'top', align: 'end', labels: { boxWidth: 12, usePointStyle: true, color: colors.text } },
+        tooltip: { backgroundColor: "#1e293b", titleColor: "#f8fafc", bodyColor: "#cbd5e1", borderColor: "#334155", borderWidth: 1 },
         annotation: {
           annotations: {
-            coAlert: { type: 'line', yMin: th.co_alerta, yMax: th.co_alerta, borderColor: 'rgba(251, 191, 36, 0.5)', borderWidth: 2, borderDash: [6, 6], label: { display: true, content: 'CO Alerta', backgroundColor: 'rgba(251, 191, 36, 0.8)' }, yScaleID: 'y-gas' },
-            coDanger: { type: 'line', yMin: th.co_perigo, yMax: th.co_perigo, borderColor: 'rgba(239, 68, 68, 0.5)', borderWidth: 2, borderDash: [6, 6], label: { display: true, content: 'CO Perigo', backgroundColor: 'rgba(239, 68, 68, 0.8)' }, yScaleID: 'y-gas' }
+            coAlert: { type: 'line', yMin: th.co_alerta, yMax: th.co_alerta, borderColor: 'rgba(251, 191, 36, 0.4)', borderWidth: 1, borderDash: [4, 4], label: { display: true, content: 'ALERTA CO', backgroundColor: 'rgba(251, 191, 36, 0.7)', font: { size: 9 } }, yScaleID: 'y-gas' },
+            coDanger: { type: 'line', yMin: th.co_perigo, yMax: th.co_perigo, borderColor: 'rgba(239, 68, 68, 0.4)', borderWidth: 1, borderDash: [4, 4], label: { display: true, content: 'PERIGO CO', backgroundColor: 'rgba(239, 68, 68, 0.7)', font: { size: 9 } }, yScaleID: 'y-gas' }
           }
         }
       },
       scales: {
-        x: { ticks: { color: "#94a3b8", maxRotation: 45, minRotation: 45 }, grid: { color: "#1e293b" } },
-        "y-temp": { position: "left", ticks: { color: "#94a3b8" }, grid: { color: "#1e293b" } },
-        "y-gas": { position: "right", ticks: { color: "#94a3b8" }, grid: { display: false }, min: 0 }
+        x: { ticks: { color: colors.text, maxRotation: 0 }, grid: { color: colors.grid } },
+        "y-temp": { position: "left", title: { display: true, text: "Temp/Umid", color: colors.text }, ticks: { color: colors.text }, grid: { color: colors.grid } },
+        "y-gas": { position: "right", title: { display: true, text: "Gases (ppm)", color: colors.text }, ticks: { color: colors.text }, grid: { display: false }, min: 0 }
       }
     }
   });
 
   // 3. Linha do Tempo de Segurança (Digital Signals)
-  if (safetyEventsChart) safetyEventsChart.destroy();
+  if (safetyEventsChart) {
+    console.log("♻️ [DEBUG] Destruindo safetyEventsChart");
+    safetyEventsChart.destroy();
+  }
+
   const sCtx = document.getElementById("safetyEventsChart").getContext("2d");
   safetyEventsChart = new Chart(sCtx, {
     type: "line",
     data: {
       labels: labels,
       datasets: [
-        { label: "Presença", data: presence, borderColor: colors.presence, stepped: true, tension: 0, pointRadius: 0, fill: false },
-        { label: "Chama", data: flame, borderColor: colors.flame, stepped: true, tension: 0, pointRadius: 0, borderWidth: 3, fill: false },
-        { label: "Buzzer", data: buzzer, borderColor: colors.buzzer, stepped: true, tension: 0, pointRadius: 0, fill: false }
+        { label: "Presença", data: presence, borderColor: colors.presence, backgroundColor: "rgba(129, 140, 248, 0.1)", stepped: true, fill: true, pointRadius: 0 },
+        { label: "Chama", data: flame, borderColor: colors.flame, stepped: true, borderWidth: 3, pointRadius: 0 },
+        { label: "Buzzer", data: buzzer, borderColor: colors.buzzer, stepped: true, pointRadius: 0 }
       ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: { 
-        legend: { display: true, labels: { color: "#cbd5e1" } },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => {
-              const val = ctx.raw;
-              if (val <= 1) return `Presença: ${val === 1 ? 'SIM' : 'NÃO'}`;
-              if (val <= 3) return `Chama: ${val === 3 ? 'DETECTADA' : 'LIMPO'}`;
-              return `Buzzer: ${val === 5 ? 'ATIVO' : 'OFF'}`;
-            }
-          }
-        }
+        legend: { position: 'top', align: 'end', labels: { boxWidth: 12, usePointStyle: true, color: colors.text } }
       },
       scales: {
-        x: { ticks: { display: false }, grid: { color: "#1e293b" } },
+        x: { ticks: { display: false }, grid: { color: colors.grid } },
         y: { 
           min: -0.5, 
           max: 5.5, 
           ticks: { 
             stepSize: 1, 
-            color: "#94a3b8", 
+            color: colors.text,
             callback: v => {
               if (v === 1) return "PRESENÇA";
               if (v === 3) return "CHAMA";
@@ -516,55 +526,42 @@ function updateCharts(items) {
               return "";
             } 
           }, 
-          grid: { color: "#1e293b" } 
+          grid: { color: colors.grid } 
         }
       }
     }
   });
 
   // 4. Análise de Correlação (Signal Bias Detection)
-  if (correlationChart) correlationChart.destroy();
-  const cCtx = document.getElementById("correlationChart").getContext("2d");
-  
-  const scatterData = displayItems.map((item, i) => ({
-    x: deltaTemp[i],
-    y: item.presenca ? 1 : 0
-  }));
+  if (correlationChart) {
+    console.log("♻️ [DEBUG] Destruindo correlationChart");
+    correlationChart.destroy();
+  }
 
+  const cCtx = document.getElementById("correlationChart").getContext("2d");
   correlationChart = new Chart(cCtx, {
     type: "scatter",
     data: {
       datasets: [{
         label: "Detecção vs Variação Térmica",
-        data: scatterData,
-        backgroundColor: (ctx) => {
-          const raw = ctx.raw;
-          return raw && raw.y === 1 ? colors.presence : colors.presenceOff;
-        },
-        pointRadius: (ctx) => {
-          const raw = ctx.raw;
-          return raw && raw.y === 1 ? 8 : 4;
-        },
-        pointHoverRadius: 10
+        data: displayItems.map((item, i) => ({ x: deltaTemp[i], y: item.presenca ? 1 : 0 })),
+        backgroundColor: (ctx) => ctx.raw && ctx.raw.y === 1 ? colors.presence : "rgba(148, 163, 184, 0.2)",
+        pointRadius: (ctx) => ctx.raw && ctx.raw.y === 1 ? 6 : 3,
+        pointHoverRadius: 8
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => `ΔTemp: ${ctx.raw.x.toFixed(2)}°C | Presença: ${ctx.raw.y === 1 ? "SIM" : "NÃO"}`
-          }
-        }
-      },
+      plugins: { legend: { display: false } },
       scales: {
-        x: { title: { display: true, text: "Variação de Temperatura (Δ°C)", color: "#cbd5e1" }, ticks: { color: "#94a3b8" }, grid: { color: "#1e293b" } },
-        y: { title: { display: true, text: "Status de Presença", color: "#cbd5e1" }, min: -0.2, max: 1.2, ticks: { stepSize: 1, color: "#94a3b8", callback: v => v === 1 ? "SIM" : "NÃO" }, grid: { color: "#1e293b" } }
+        x: { title: { display: true, text: "Variação de Temperatura (Δ°C)", color: colors.text }, ticks: { color: colors.text }, grid: { color: colors.grid } },
+        y: { title: { display: true, text: "Status de Presença", color: colors.text }, min: -0.2, max: 1.2, ticks: { stepSize: 1, color: colors.text, callback: v => v === 1 ? "SIM" : "NÃO" }, grid: { color: colors.grid } }
       }
     }
   });
+
+  console.log("✅ [DEBUG] Gráficos renderizados. Instâncias ativas agora:", Chart.instances.length);
 }
 
 document.addEventListener("DOMContentLoaded", async () => {

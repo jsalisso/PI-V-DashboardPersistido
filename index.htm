@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>AirGuard Dashboard PI-V v2.0</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
@@ -104,13 +107,17 @@
           <div class="panel chart-container">
             <h3>Monitoramento Temporal</h3>
             <p class="chart-subtitle">Variação das métricas absolutas ao longo do período</p>
-            <canvas id="timeSeriesChart"></canvas>
+            <div class="chart-wrapper">
+              <canvas id="timeSeriesChart"></canvas>
+            </div>
           </div>
           
           <div class="panel chart-container">
             <h3>Linha do Tempo de Segurança</h3>
             <p class="chart-subtitle">Eventos críticos: Presença (azul), Chama (vermelho), Buzzer (laranja)</p>
-            <canvas id="safetyEventsChart"></canvas>
+            <div class="chart-wrapper">
+              <canvas id="safetyEventsChart"></canvas>
+            </div>
           </div>
           
           <div class="panel chart-container full-width">
@@ -119,7 +126,9 @@
               Diagnóstico: Detectando se variações térmicas bruscas (ΔTemp) causam falsos positivos. 
               <span class="info-tag" title="Se muitos pontos 'SIM' aparecerem em ΔTemp alto, o sensor pode estar sofrendo viés térmico.">ⓘ Info</span>
             </p>
-            <canvas id="correlationChart"></canvas>
+            <div class="chart-wrapper">
+              <canvas id="correlationChart"></canvas>
+            </div>
           </div>
         </div>
       </div>
