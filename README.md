@@ -5,9 +5,10 @@ Dashboard web desenvolvido em **HTML + CSS + JavaScript puro**, responsável por
 Este dashboard consome dados de um backend (Node.js + MongoDB + MQTT) e permite:
 
 - Visualização em tempo real dos sensores
-- Consulta de histórico por período
-- Paginação de resultados
-- Exportação de dados em CSV
+- Consulta de histórico com **Safety Data Engineering** (Agregação de picos)
+- **Safety Events Timeline**: Linha do tempo de eventos críticos (Chama, Presença, Buzzer)
+- Análise de viés de hardware (ΔTemp vs Presença)
+- Exportação de dados analíticos enriquecidos em CSV
 
 ---
 
@@ -25,7 +26,7 @@ Este dashboard consome dados de um backend (Node.js + MongoDB + MQTT) e permite:
   - Gás (ppm)
   - Temperatura
   - Umidade
-  - Presença
+  - Presença / Chama / Buzzer
 
 ---
 
@@ -52,9 +53,9 @@ Permite consultar dados históricos com filtros:
 
 ### 📥 Exportação CSV
 
-- Exporta os dados exibidos na tabela
-- Arquivo gerado automaticamente
-- Nome do arquivo inclui sensor e página
+- Exporta os dados exibidos na tabela + campos analíticos
+- Inclui `co_level`, `gas_level` e `safety_status` (SAFE/CRITICAL)
+- Arquivo gerado automaticamente com metadados do sensor
 
 ---
 

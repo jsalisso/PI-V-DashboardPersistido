@@ -4,7 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>AirGuard Dashboard PI-V v2.0</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
 </head>
 <body>
   <div class="container">
@@ -61,8 +66,12 @@
 
       <div class="pagination">
         <button id="prevPageBtn" class="secondary-btn">Anterior</button>
-        <span id="paginationInfo">Página 1 de 1</span>
+        <span id="paginationInfo">Mostrando 0 de 0 registros (Página 1)</span>
         <button id="nextPageBtn" class="secondary-btn">Próxima</button>
+      </div>
+
+      <div id="thresholdWarning" class="disclaimer" style="display: none; border-color: #f59e0b; color: #fde68a;">
+        ⚠️ **Observabilidade Crítica**: Foram detectadas variações nos limites de segurança (thresholds) durante este período. O dashboard está priorizando os valores mais recentes para as zonas de alerta.
       </div>
 
       <div id="historyStatus" class="status-text">
@@ -80,10 +89,48 @@
               <th>Temp</th>
               <th>Umidade</th>
               <th>Presença</th>
+              <th>Chama</th>
+              <th>Buzzer</th>
             </tr>
           </thead>
           <tbody id="historyTableBody"></tbody>
         </table>
+      </div>
+
+      <!-- Seção de Gráficos -->
+      <div class="charts-section">
+        <div class="disclaimer">
+          ⚠️ Os gráficos abaixo representam apenas os dados carregados na tabela acima (esta página).
+        </div>
+        
+        <div class="charts-grid">
+          <div class="panel chart-container">
+            <h3>Monitoramento Temporal</h3>
+            <p class="chart-subtitle">Variação das métricas absolutas ao longo do período</p>
+            <div class="chart-wrapper">
+              <canvas id="timeSeriesChart"></canvas>
+            </div>
+          </div>
+          
+          <div class="panel chart-container">
+            <h3>Linha do Tempo de Segurança</h3>
+            <p class="chart-subtitle">Eventos críticos: Presença (azul), Chama (vermelho), Buzzer (laranja)</p>
+            <div class="chart-wrapper">
+              <canvas id="safetyEventsChart"></canvas>
+            </div>
+          </div>
+          
+          <div class="panel chart-container full-width">
+            <h3>Análise de Correlação: ΔTemperatura vs Presença</h3>
+            <p class="chart-subtitle">
+              Diagnóstico: Detectando se variações térmicas bruscas (ΔTemp) causam falsos positivos. 
+              <span class="info-tag" title="Se muitos pontos 'SIM' aparecerem em ΔTemp alto, o sensor pode estar sofrendo viés térmico.">ⓘ Info</span>
+            </p>
+            <div class="chart-wrapper">
+              <canvas id="correlationChart"></canvas>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
